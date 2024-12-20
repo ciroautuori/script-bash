@@ -1,195 +1,183 @@
 #!/bin/bash
 
 # Exit on error and undefined variables
-# Imposta lo script per uscire in caso di errore o variabili non definite
 set -eu
 
 # Colors for output
-# Definisce i colori per l'output
-RED='\033[0;31m'       # Rosso
-GREEN='\033[0;32m'     # Verde
-NC='\033[0m'           # Nessun colore (reset)
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+NC='\033[0m'
 
 # Logging function
-# Funzione per loggare messaggi di stato
 log() {
-    echo -e "${GREEN}[$(date +'%Y-%m-%d %H:%M:%S')]${NC} $1"  # Stampa un messaggio con la data e l'ora
+    echo -e "${GREEN}[$(date +'%Y-%m-%d %H:%M:%S')]${NC} $1"
 }
 
 # Error function
-# Funzione per loggare errori e fermare lo script
 error() {
-    echo -e "${RED}[ERROR] $1${NC}" >&2   # Stampa l'errore in rosso
-    exit 1  # Esce dallo script con stato di errore
+    echo -e "${RED}[ERROR] $1${NC}" >&2
+    exit 1
 }
 
 # Check if running as root
-# Controlla se lo script è eseguito come root
 if [ "$(id -u)" -ne 0 ]; then
-    error "This script must be run as root"  # Mostra errore e termina se non è root
+    error "This script must be run as root"
 fi
 
+# Ask user to input username
+read -p "Inserisci il tuo nome utente: " username
+
+# Print username for verification
+echo "Il tuo nome utente è: $username"
+
 # Backup sources.list
-# Fa una copia di backup del file sources.list
 log "Backing up sources.list..."
-cp /etc/apt/sources.list /etc/apt/sources.list.backup  # Copia il file delle sorgenti APT
+cp /etc/apt/sources.list /etc/apt/sources.list.backup
 
 # Update system
-# Esegue l'aggiornamento del sistema
 log "Updating package lists..."
-apt update || error "Failed to update package lists"  # Aggiorna la lista dei pacchetti
-apt upgrade -y || error "Failed to upgrade packages"   # Esegue l'upgrade dei pacchetti
+apt update || error "Failed to update package lists"
+apt upgrade -y || error "Failed to upgrade packages"
 
 # Install essential packages
-# Installa pacchetti di base essenziali
 log "Installing base system packages..."
-BASE_PACKAGES=(   # Definisce un array con i pacchetti di base da installare
-    sudo
-    htop
-    curl
-    wget
-    ufw
-    gnupg
+base_packages=(
     apt-transport-https
     ca-certificates
+    curl
+    debian-archive-keyring
+    gnupg
+    htop
     lsb-release
     software-properties-common
-    debian-archive-keyring
+    sudo
+    ufw
+    wget
 )
 
-apt install -y "${BASE_PACKAGES[@]}" || error "Failed to install base packages"  # Installa i pacchetti definiti
+apt install -y "${base_packages[@]}" || error "Failed to install base packages"
 
 # Install desktop environment with minimal recommendations
-# Installa l'ambiente desktop con raccomandazioni minime
-log "Installing desktop environment..."
-DESKTOP_PACKAGES=(  # Array con i pacchetti per l'ambiente desktop
-    xorg
-    xfce4
-    xfce4-goodies
+log "Installing XFCE desktop environment..."
+desktop_packages=(
     lightdm
     lightdm-gtk-greeter
+    xfce4
+    xfce4-goodies
+    xorg
 )
 
-apt install -y --no-install-recommends "${DESKTOP_PACKAGES[@]}" || error "Failed to install desktop packages"  # Installa i pacchetti senza raccomandazioni aggiuntive
+apt install -y --no-install-recommends "${desktop_packages[@]}" || error "Failed to install desktop packages"
 
 # Install NVIDIA drivers if needed
-# Installa i driver NVIDIA se necessario
-if lspci | grep -i nvidia > /dev/null; then   # Controlla se c'è una GPU NVIDIA
+if lspci | grep -i nvidia > /dev/null; then
     log "NVIDIA card detected, installing drivers..."
-    apt install -y nvidia-driver nvidia-kernel-dkms nvidia-kernel-source || error "Failed to install NVIDIA drivers"  # Installa i driver NVIDIA
+    apt install -y nvidia-driver nvidia-kernel-dkms nvidia-kernel-source || error "Failed to install NVIDIA drivers"
 fi
 
 # Install additional utilities
-# Installa pacchetti utili aggiuntivi
 log "Installing additional utilities..."
-UTILITY_PACKAGES=(  # Array con i pacchetti aggiuntivi
-    gnome-disk-utility
-    neofetch
-    powertop
-    firefox-esr
-    git
-    mousepad
-    network-manager-gnome
-    firmware-iwlwifi
-    iw
-    pavucontrol
-    python3
-    python3-pip
-    gnome-screenshot
+utility_packages=(
     arc-theme
+    bleachbit
     faenza-icon-theme
     ffmpeg
-    synaptic
+    firmware-iwlwifi
+    git
+    gnome-disk-utility
+    gnome-screenshot
     gstreamer1.0-libav
-    bleachbit
+    gvfs
+    gvfs-backends
+    gvfs-daemons
+    gvfs-fuse
+    iw
+    mousepad
+    neofetch
+    network-manager-gnome
+    pavucontrol
+    powertop
+    python3
+    python3-pip
+    synaptic
     timeshift
-    xdg-utils 
-    xarchiver   
     tlp
-    gvfs 
-    gvfs-backends 
-    gvfs-daemons 
-    gvfs-fuse 
+    xarchiver
+    xdg-utils
 )
 
-apt install -y "${UTILITY_PACKAGES[@]}" || error "Failed to install utility packages"  # Installa i pacchetti aggiuntivi
+apt install -y "${utility_packages[@]}" || error "Failed to install utility packages"
 
 # Install and configure Docker
-# Installa e configura Docker
 install_docker() {
+    local username="$1" # Il primo argomento passato alla funzione diventa il nome utente
     log "Installing Docker..."
-    
-    # Ensure ciroautuori is in sudo group
-    log "Adding ciroautuori to sudo group..."
-    adduser ciroautuori sudo || error "Failed to add ciroautuori to sudo group"
-    
+
+    # Ensure the specified user is in the sudo group
+    log "Adding $username to sudo group..."
+    usermod -aG sudo "$username" || error "Failed to add $username to sudo group"
+
     if ! command -v docker &> /dev/null; then
         install -m 0755 -d /etc/apt/keyrings
         curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
         chmod a+r /etc/apt/keyrings/docker.gpg
-        
+
         echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
         tee /etc/apt/sources.list.d/docker.list > /dev/null
-        
+
         apt update
         apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin || error "Failed to install Docker"
-        
-        # Add ciroautuori to docker group
-        usermod -aG docker ciroautuori || error "Failed to add ciroautuori to docker group"
-        log "User ciroautuori added to docker group"
-        
+
+        # Add the specified user to docker group
+        usermod -aG docker "$username" || error "Failed to add $username to docker group"
+        log "User $username added to docker group"
+
         # Notify about logout requirement
         log "Please logout and login again for docker group changes to take effect"
     else
         log "Docker is already installed"
         # Ensure user is in docker group even if Docker was already installed
-        usermod -aG docker ciroautuori || error "Failed to add ciroautuori to docker group"
+        usermod -aG docker "$username" || error "Failed to add $username to docker group"
     fi
 }
+
 # Install Node.js
-# Installa Node.js
 install_nodejs() {
     log "Installing Node.js..."
-    if ! command -v node &> /dev/null; then  # Verifica se Node.js è già installato
-        curl -fsSL https://deb.nodesource.com/setup_20.x | bash -  # Scarica e installa il setup per Node.js 20.x
-        apt install -y nodejs || error "Failed to install Node.js"  # Installa Node.js
+    if ! command -v node &> /dev/null; then
+        curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+        apt install -y nodejs || error "Failed to install Node.js"
     else
-        log "Node.js is already installed"  # Se Node.js è già installato, mostra un messaggio
+        log "Node.js is already installed"
     fi
 }
 
 # Install and configure system tools
-# Installa e configura Docker e Node.js
-install_docker
+install_docker "$username" #Passa username come argomento
 install_nodejs
 
 # Configure LightDM
-# Configura LightDM (gestore di accesso)
 log "Configuring LightDM..."
-sed -i 's/#greeter-show-power=false/greeter-show-power=true/' /etc/lightdm/lightdm.conf  # Modifica il file di configurazione di LightDM
-systemctl enable lightdm || error "Failed to enable LightDM"  # Abilita LightDM all'avvio
+sed -i 's/#greeter-show-power=false/greeter-show-power=true/' /etc/lightdm/lightdm.conf
+systemctl enable lightdm || error "Failed to enable LightDM"
 
 # Restart network manager
-# Riavvia il gestore di rete
 log "Restarting NetworkManager..."
-systemctl restart NetworkManager || error "Failed to restart NetworkManager"  # Riavvia NetworkManager per applicare eventuali modifiche
+systemctl restart NetworkManager || error "Failed to restart NetworkManager"
 
 # Final system update
-# Esegui un ultimo aggiornamento del sistema
 log "Performing final system update..."
-apt update && apt upgrade -y || error "Failed to perform final system update"  # Aggiorna i pacchetti per l'ultima volta
+apt update && apt upgrade -y || error "Failed to perform final system update"
 
 # Clean up
-# Pulisce i pacchetti inutilizzati
 log "Cleaning up..."
-apt autoremove -y  # Rimuove pacchetti non più necessari
-apt clean  # Pulisce la cache di apt
+apt autoremove -y
+apt clean
 
 # Create success file
-# Crea un file che indica che l'installazione è completa
 touch /root/.debian_setup_complete
 
-log "Installation completed successfully!"  # Mostra il messaggio di successo
-log "System will reboot in 10 seconds..."  # Messaggio prima del riavvio
-sleep 10  # Attende 10 secondi
-reboot  # Riavvia il sistema
+log "Installation completed successfully!"
+log "System will reboot in 10 seconds..."
+sleep 10
+reboot

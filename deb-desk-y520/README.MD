@@ -38,7 +38,7 @@ The script performs the following tasks:
 5. **Desktop Environment Installation:** Installs XFCE4 with minimal recommendations.
 6. **NVIDIA Driver Installation:** Installs NVIDIA drivers if a compatible GPU is detected.
 7. **Additional Utilities Installation:** Installs a wide range of useful utilities.
-8. **Docker Installation and Setup:** Installs Docker CE, adds the user `ciroautuori` to the docker group, and ensures a sudo entry.
+8. **Docker Installation and Setup:** Installs Docker CE and adds the specified user to the docker group, and ensures a sudo entry.
 9. **Node.js Installation:** Installs Node.js (version 20.x).
 10. **LightDM Configuration:** Configures LightDM to show the power option in the greeter.
 11. **Network Restart:** Restarts NetworkManager for changes to take effect.
@@ -63,12 +63,14 @@ The script performs the following tasks:
     sudo ./setup.sh
     ```
 
+    The script will ask you to input your username during execution.
+
 5. **Reboot:** After the script completes, the system will reboot automatically.
-6. **Post-Reboot:** Log in with the user `ciroautuori`. You might need to log out and back in for the docker group changes to take effect.
+6. **Post-Reboot:** Log in with the specified user. You might need to log out and back in for the docker group changes to take effect.
 
 ## Important Notes
 
-- The script assumes the user is named `ciroautuori`. If your user has a different name, you'll need to modify the script accordingly.
+- The script now requests the username during execution. This user will be added to the sudo and docker groups.
 - The script installs `nvidia-driver`, `nvidia-kernel-dkms`, and `nvidia-kernel-source`. Be sure to check your system's NVIDIA card for compatibility.
 - This script was designed for a specific hardware configuration but can be adapted for other systems.
 
